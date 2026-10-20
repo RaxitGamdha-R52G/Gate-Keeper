@@ -7,6 +7,7 @@ import org.springframework.transaction.annotation.Transactional;
 import tech.raxit.gatekeeper.management.entity.ManagementUser;
 import tech.raxit.gatekeeper.management.entity.ManagementUserSetupToken;
 import tech.raxit.gatekeeper.management.entity.Organization;
+import tech.raxit.gatekeeper.management.exception.InvalidSetupTokenException;
 import tech.raxit.gatekeeper.management.repository.ManagementUserSetupTokenRepository;
 import tech.raxit.gatekeeper.management.util.SetupTokenGenerator;
 
@@ -35,8 +36,8 @@ public class ManagementUserPasswordSetupService {
         }
     }
 
-    private static IllegalArgumentException invalidToken() {
-        return new IllegalArgumentException(
+    private static InvalidSetupTokenException invalidToken() {
+        return new InvalidSetupTokenException(
                 "Setup token is invalid, expired, or already used"
         );
     }

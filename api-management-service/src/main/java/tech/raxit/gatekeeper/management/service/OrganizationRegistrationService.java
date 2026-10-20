@@ -1,4 +1,3 @@
-
 package tech.raxit.gatekeeper.management.service;
 
 import lombok.RequiredArgsConstructor;
@@ -17,6 +16,7 @@ import tech.raxit.gatekeeper.management.entity.Organization;
 import tech.raxit.gatekeeper.management.entity.Role;
 import tech.raxit.gatekeeper.management.entity.enums.OrganizationStatus;
 import tech.raxit.gatekeeper.management.event.setup.SetupInvitationRequested;
+import tech.raxit.gatekeeper.management.exception.DuplicateResourceException;
 import tech.raxit.gatekeeper.management.mapper.OrganizationRegistrationMapper;
 import tech.raxit.gatekeeper.management.repository.ManagementUserRepository;
 import tech.raxit.gatekeeper.management.repository.OrganizationRepository;
@@ -28,7 +28,7 @@ import java.util.UUID;
 @Service
 @PreAuthorize("hasRole('SUPER_ADMIN')")
 @RequiredArgsConstructor
-public class OrganizationRegistrationService{
+public class OrganizationRegistrationService {
 
     private static final String ORGANIZATION_ADMIN_ROLE = "ORGANIZATION_ADMIN";
 
@@ -58,7 +58,7 @@ public class OrganizationRegistrationService{
 
         LocalDateTime now = LocalDateTime.now();
 
-        Organization organization =organizationRegistrationMapper.toOrganizationEntity(organizationDetails);
+        Organization organization = organizationRegistrationMapper.toOrganizationEntity(organizationDetails);
 
         organization.setStatus(OrganizationStatus.INACTIVE);
         organization.setCreatedAt(now);
@@ -103,25 +103,25 @@ public class OrganizationRegistrationService{
     ) {
 
         if (organizationRepository.existsBySlug(organization.slug())) {
-            throw new IllegalArgumentException(
+            throw new DuplicateResourceException(
                     "Organization slug already exists"
             );
         }
 
         if (organizationRepository.existsByName(organization.name())) {
-            throw new IllegalArgumentException(
+            throw new DuplicateResourceException(
                     "Organization name already exists"
             );
         }
 
         if (managementUserRepository.existsByUsername(user.username())) {
-            throw new IllegalArgumentException(
+            throw new DuplicateResourceException(
                     "Username already exists"
             );
         }
 
         if (managementUserRepository.existsByEmail(user.email())) {
-            throw new IllegalArgumentException(
+            throw new DuplicateResourceException(
                     "Email already exists"
             );
         }
