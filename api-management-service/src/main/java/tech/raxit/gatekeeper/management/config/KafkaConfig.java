@@ -10,8 +10,20 @@ import org.springframework.kafka.config.TopicBuilder;
 public class KafkaConfig {
 
     @Bean
-    public NewTopic createKafkaTopic(
+    public NewTopic setupInvitationsKafkaTopic(
             @Value("${gatekeeper.kafka.topics.setup-invitations}")
+            String topicName
+    ) {
+        return TopicBuilder
+                .name(topicName)
+                .partitions(1)
+                .replicas(1)
+                .build();
+    }
+
+    @Bean
+    public NewTopic organizationEventsTopic(
+            @Value("${gatekeeper.kafka.topics.organization-events}")
             String topicName
     ) {
         return TopicBuilder

@@ -5,12 +5,24 @@ import org.springframework.stereotype.Component;
 import tech.raxit.gatekeeper.management.dto.request.organization.InitialUserDetails;
 import tech.raxit.gatekeeper.management.dto.request.organization.OrganizationDetails;
 import tech.raxit.gatekeeper.management.dto.response.organization.OrganizationRegistrationResponse;
+import tech.raxit.gatekeeper.management.dto.response.organization.OrganizationResponse;
 import tech.raxit.gatekeeper.management.dto.response.organization.RegisteredUserSummary;
 import tech.raxit.gatekeeper.management.entity.ManagementUser;
 import tech.raxit.gatekeeper.management.entity.Organization;
 
 @Component
-public class OrganizationRegistrationMapper {
+public class OrganizationMapper {
+
+    public OrganizationResponse toResponseDto(Organization organization) {
+        return new OrganizationResponse(
+                organization.getId(),
+                organization.getName(),
+                organization.getSlug(),
+                organization.getStatus(),
+                organization.getCreatedAt(),
+                organization.getUpdatedAt()
+        );
+    }
 
     public Organization toOrganizationEntity(
             @NonNull OrganizationDetails details) {

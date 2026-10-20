@@ -20,7 +20,7 @@ public class SetupInvitationKafkaPublisher {
 
     public SetupInvitationKafkaPublisher(
             KafkaTemplate<String, Object> kafkaTemplate,
-            @Value("${gatekeeper.kafka.topics.setup-invitations:gatekeeper.setup-invitations.v1}")
+            @Value("${gatekeeper.kafka.topics.setup-invitations}")
             String topic
     ) {
         this.kafkaTemplate = kafkaTemplate;

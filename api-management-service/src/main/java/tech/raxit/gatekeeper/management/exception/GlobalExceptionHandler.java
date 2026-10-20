@@ -16,8 +16,7 @@ import java.util.stream.Collectors;
 
 @RestControllerAdvice
 public class GlobalExceptionHandler {
-    private static final Logger log =
-            LoggerFactory.getLogger(GlobalExceptionHandler.class);
+    private static final Logger log = LoggerFactory.getLogger(GlobalExceptionHandler.class);
 
     @ExceptionHandler(InvalidSetupTokenException.class)
     public ProblemDetail handleInvalidSetupToken(
@@ -80,6 +79,16 @@ public class GlobalExceptionHandler {
         return ProblemDetail.forStatusAndDetail(
                 HttpStatus.BAD_REQUEST,
                 "Request body is missing or malformed"
+        );
+    }
+
+    @ExceptionHandler(OrganizationNotFoundException.class)
+    public ProblemDetail handleOrganizationNotFound(
+            OrganizationNotFoundException exception
+    ) {
+        return ProblemDetail.forStatusAndDetail(
+                HttpStatus.NOT_FOUND,
+                exception.getMessage()
         );
     }
 }
