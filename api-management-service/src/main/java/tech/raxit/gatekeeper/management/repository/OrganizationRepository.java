@@ -1,0 +1,11 @@
+package tech.raxit.gatekeeper.management.repository;
+
+import org.springframework.data.jpa.repository.JpaRepository;
+import tech.raxit.gatekeeper.management.entity.Organization;
+
+public interface OrganizationRepository extends JpaRepository<Organization, Long> {
+
+    boolean existsByName(String name);
+
+    boolean existsBySlug(String slug);
+}

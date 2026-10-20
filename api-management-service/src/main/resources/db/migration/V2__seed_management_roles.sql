@@ -1,0 +1,4 @@
+INSERT INTO roles (name)
+VALUES ('SUPER_ADMIN'),
+       ('ORGANIZATION_ADMIN'),
+       ('GATEWAY_SERVICE');
