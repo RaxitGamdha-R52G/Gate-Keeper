@@ -10,6 +10,7 @@ import org.springframework.transaction.annotation.Transactional;
 import tech.raxit.gatekeeper.management.dto.request.OrganizationRequest;
 import tech.raxit.gatekeeper.management.dto.request.OrganizationStatusRequest;
 import tech.raxit.gatekeeper.management.dto.request.TenantAdminRequest;
+import tech.raxit.gatekeeper.management.dto.request.TenantOrganizationRequest;
 import tech.raxit.gatekeeper.management.dto.response.OrganizationResponse;
 import tech.raxit.gatekeeper.management.dto.response.TenantAdminResponse;
 import tech.raxit.gatekeeper.management.entity.ManagementUser;
@@ -31,6 +32,7 @@ public class OrganizationService {
     private final ManagementUserRepository managementUserRepository;
     private final RoleRepository roleRepository;
     private final PasswordEncoder passwordEncoder;
+    private final TenantContext tenantContext;
 
     @Transactional
     public OrganizationResponse registerOrganization(OrganizationRequest request) {
@@ -204,7 +206,7 @@ public class OrganizationService {
     public TenantAdminResponse updateTenantAdmin(Long organizationId, TenantAdminRequest request) {
         ManagementUser user = getTenantAdmin(organizationId);
 
-        if(!user.getUsername().equals(request.username())
+        if (!user.getUsername().equals(request.username())
                 && managementUserRepository.existsByUsername(request.username())) {
             throw new ApiException(HttpStatus.CONFLICT, "Username already exists");
         }
@@ -234,5 +236,29 @@ public class OrganizationService {
                         HttpStatus.NOT_FOUND,
                         "Organization administrator not found"
                 ));
+    }
+
+    @Transactional(readOnly = true)
+    public OrganizationResponse getOwnOrganization() {
+        return OrganizationResponse.from(tenantContext.getOrganization());
+    }
+
+    @Transactional
+    public OrganizationResponse updateOwnOrganization(TenantOrganizationRequest request) {
+        Organization organization = tenantContext.getOrganization();
+
+        if (!organization.getName().equalsIgnoreCase(request.name())
+                && organizationRepository.existsByNameIgnoreCase(request.name())) {
+            throw new ApiException(
+                    HttpStatus.CONFLICT,
+                    "Organization name already exists"
+            );
+        }
+
+        organization.setName(request.name());
+
+        organizationRepository.flush();
+
+        return OrganizationResponse.from(organization);
     }
 }
