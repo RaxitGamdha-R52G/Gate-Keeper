@@ -2,18 +2,24 @@ package tech.raxit.gatekeeper.management.repository;
 
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
+import org.springframework.data.domain.Range;
 import org.springframework.data.jpa.repository.JpaRepository;
 import tech.raxit.gatekeeper.management.entity.Organization;
+import tech.raxit.gatekeeper.management.entity.enums.OrganizationStatus;
 
 import java.util.Optional;
 
 public interface OrganizationRepository extends JpaRepository<Organization, Long> {
 
-    boolean existsByName(String name);
+    boolean existsByNameIgnoreCase(String name);
 
-    boolean existsBySlug(String slug);
+    boolean existsBySlugIgnoreCase(String slug);
 
-    Optional<Organization> findByIdAndDeletedAtIsNull(Long id);
+    boolean existsByNameIgnoreCaseAndIdNot(String name, Long currentId);
 
-    Page<Organization> findAllByDeletedAtIsNull(Pageable pageable);
+    boolean existsBySlugIgnoreCaseAndIdNot(String slug, Long currentId);
+
+    Page<Organization> findAllByStatusNot(OrganizationStatus status, Pageable pageable);
+
+    Optional<Organization> findByIdAndStatusNot(Long id, OrganizationStatus status);
 }

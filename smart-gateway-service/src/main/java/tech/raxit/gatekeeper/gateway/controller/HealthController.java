@@ -5,7 +5,7 @@ import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
-import tech.raxit.gatekeeper.gateway.dto.responseDto.HealthResponse;
+import tech.raxit.gatekeeper.gateway.dto.response.HealthResponse;
 
 @RestController
 @RequestMapping("/health")

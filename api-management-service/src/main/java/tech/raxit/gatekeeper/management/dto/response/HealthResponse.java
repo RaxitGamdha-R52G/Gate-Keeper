@@ -12,8 +12,7 @@ import java.time.LocalDateTime;
 @Getter
 @Setter
 public class HealthResponse {
-    private String appName;
-    private String appDescription;
+
     private String serviceStatus;
     private String dbStatus;
     private LocalDateTime timestamp;

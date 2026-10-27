@@ -15,16 +15,6 @@ import java.time.LocalDateTime;
                         name = "uk_management_users_username",
                         columnNames = "username"
                 ),
-                @UniqueConstraint(
-                        name = "uk_management_users_email",
-                        columnNames = "email"
-                )
-        },
-        indexes = {
-                @Index(
-                        name = "idx_management_users_organization",
-                        columnList = "organization_id"
-                )
         }
 )
 @Getter
@@ -36,10 +26,7 @@ public class ManagementUser {
     @GeneratedValue(strategy = GenerationType.IDENTITY)
     private Long id;
 
-    @Column(nullable = false, length = 150)
-    private String name;
-
-    @ManyToOne(fetch = FetchType.LAZY)
+    @OneToOne(fetch = FetchType.LAZY)
     @JoinColumn(
             name = "organization_id",
             foreignKey = @ForeignKey(
@@ -48,7 +35,7 @@ public class ManagementUser {
     )
     private Organization organization;
 
-    @ManyToOne(fetch = FetchType.LAZY, optional = false)
+    @ManyToOne(fetch = FetchType.EAGER, optional = false)
     @JoinColumn(
             name = "role_id",
             nullable = false,
@@ -64,11 +51,8 @@ public class ManagementUser {
     @Column(name = "password_hash", nullable = false, length = 255)
     private String passwordHash;
 
-    @Column(nullable = false, length = 254)
-    private String email;
-
     @Column(nullable = false)
-    private boolean enabled = false;
+    private boolean enabled = true;
 
     @Column(name = "created_at", nullable = false, updatable = false)
     private LocalDateTime createdAt;

@@ -1,7 +1,9 @@
 package tech.raxit.gatekeeper.management.entity.enums;
 
 public enum OrganizationStatus {
-    INACTIVE,
+    PENDING,
     ACTIVE,
-    SUSPENDED
+    INACTIVE,
+    SUSPENDED,
+    DELETED
 }

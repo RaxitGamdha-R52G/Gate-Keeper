@@ -1,94 +1,86 @@
 package tech.raxit.gatekeeper.management.exception;
 
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
+import jakarta.servlet.http.HttpServletRequest;
 import org.springframework.http.HttpStatus;
-import org.springframework.http.ProblemDetail;
+import org.springframework.http.ResponseEntity;
 import org.springframework.http.converter.HttpMessageNotReadableException;
-import org.springframework.validation.FieldError;
 import org.springframework.web.bind.MethodArgumentNotValidException;
 import org.springframework.web.bind.annotation.ExceptionHandler;
+import org.springframework.web.bind.annotation.ResponseStatus;
 import org.springframework.web.bind.annotation.RestControllerAdvice;
+import tech.raxit.gatekeeper.management.dto.response.ExceptionResponseDto;
+import tech.raxit.gatekeeper.management.dto.response.ValidationExceptionResponseDto;
 
+import java.time.Instant;
+import java.util.LinkedHashMap;
 import java.util.Map;
-import java.util.TreeMap;
-import java.util.stream.Collectors;
 
 @RestControllerAdvice
 public class GlobalExceptionHandler {
-    private static final Logger log = LoggerFactory.getLogger(GlobalExceptionHandler.class);
-
-    @ExceptionHandler(InvalidSetupTokenException.class)
-    public ProblemDetail handleInvalidSetupToken(
-            InvalidSetupTokenException exception
-    ) {
-        return ProblemDetail.forStatusAndDetail(HttpStatus.UNAUTHORIZED, exception.getMessage());
-    }
 
     @ExceptionHandler(MethodArgumentNotValidException.class)
-    public ProblemDetail handleValidationErrors(
-            MethodArgumentNotValidException exception
+    @ResponseStatus(HttpStatus.BAD_REQUEST)
+    public ValidationExceptionResponseDto handleValidationException(
+            MethodArgumentNotValidException exception,
+            HttpServletRequest request
     ) {
-        Map<String, String> errors = exception.getBindingResult()
-                .getFieldErrors()
-                .stream()
-                .collect(Collectors.toMap(
-                        FieldError::getField,
-                        error -> error.getDefaultMessage() == null
-                                ? "Invalid value"
-                                : error.getDefaultMessage(),
-                        (first, second) -> first,
-                        TreeMap::new
-                ));
+        Map<String, String> fieldErrors = new LinkedHashMap<>();
 
-        ProblemDetail problem = ProblemDetail
-                .forStatusAndDetail(
-                        HttpStatus.BAD_REQUEST,
-                        "One or more request fields are invalid"
+        exception.getBindingResult()
+                .getFieldErrors()
+                .forEach(error ->
+                        fieldErrors.putIfAbsent(
+                                error.getField(),
+                                error.getDefaultMessage()
+                        )
                 );
 
-        problem.setProperty("errors", errors);
-
-        return problem;
-    }
-
-    @ExceptionHandler(DuplicateResourceException.class)
-    public ProblemDetail handleDuplicateResource(
-            DuplicateResourceException exception
-    ) {
-        return ProblemDetail.forStatusAndDetail(
-                HttpStatus.CONFLICT,
-                exception.getMessage()
-        );
-    }
-
-    @ExceptionHandler(Exception.class)
-    public ProblemDetail handleUnexpectedException(Exception exception) {
-        log.error("Unhandled exception while processing an API request", exception);
-
-        return ProblemDetail.forStatusAndDetail(
-                HttpStatus.INTERNAL_SERVER_ERROR,
-                "An unexpected server error occurred"
+        return new ValidationExceptionResponseDto(
+                Instant.now(),
+                HttpStatus.BAD_REQUEST.value(),
+                HttpStatus.BAD_REQUEST.getReasonPhrase(),
+                "Validation Failed",
+                request.getRequestURI(),
+                fieldErrors
         );
     }
 
     @ExceptionHandler(HttpMessageNotReadableException.class)
-    public ProblemDetail handleUnreadableRequestBody(
-            HttpMessageNotReadableException exception
+    public ResponseEntity<ExceptionResponseDto> handleUnreadableMessage(
+            HttpMessageNotReadableException exception,
+            HttpServletRequest request
     ) {
-        return ProblemDetail.forStatusAndDetail(
+        return generateExceptionResponse(
                 HttpStatus.BAD_REQUEST,
-                "Request body is missing or malformed"
+                "Request body is invalid or contains an unsupported value.",
+                request.getRequestURI()
         );
     }
 
-    @ExceptionHandler(OrganizationNotFoundException.class)
-    public ProblemDetail handleOrganizationNotFound(
-            OrganizationNotFoundException exception
+    @ExceptionHandler(ApiException.class)
+    public ResponseEntity<ExceptionResponseDto> handleApiExceptions(
+            ApiException exception,
+            HttpServletRequest request
     ) {
-        return ProblemDetail.forStatusAndDetail(
-                HttpStatus.NOT_FOUND,
-                exception.getMessage()
+        return generateExceptionResponse(
+                exception.getStatus(),
+                exception.getMessage(),
+                request.getRequestURI()
         );
+    }
+
+    private ResponseEntity<ExceptionResponseDto> generateExceptionResponse(
+            HttpStatus status,
+            String message,
+            String requestURI
+    ) {
+        ExceptionResponseDto response = new ExceptionResponseDto(
+                Instant.now(),
+                status.value(),
+                status.getReasonPhrase(),
+                message,
+                requestURI
+        );
+        return ResponseEntity.status(status).body(response);
     }
 }

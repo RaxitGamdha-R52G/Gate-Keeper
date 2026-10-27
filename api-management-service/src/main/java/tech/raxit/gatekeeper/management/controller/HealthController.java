@@ -1,6 +1,5 @@
 package tech.raxit.gatekeeper.management.controller;
 
-import org.springframework.beans.factory.annotation.Value;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.RequestMapping;
@@ -14,13 +13,7 @@ import java.time.LocalDateTime;
 @RequestMapping("/health")
 public class HealthController {
 
-    private final HealthService healthService;
-
-    @Value("${info.app.name}")
-    private String appName;
-
-    @Value("${info.app.description}")
-    private String appDescription;
+    public final HealthService healthService;
 
     public HealthController(HealthService healthService) {
         this.healthService = healthService;
@@ -28,14 +21,8 @@ public class HealthController {
 
     @GetMapping
     public ResponseEntity<HealthResponse> health() {
+        String dbStatus = healthService.getHealth();
         return ResponseEntity.ok(
-                new HealthResponse(
-                        appName,
-                        appDescription,
-                        "UP",
-                        healthService.getHealth(),
-                        LocalDateTime.now()
-                )
-        );
+                new HealthResponse("UP", dbStatus, LocalDateTime.now()));
     }
 }

@@ -1,7 +1,0 @@
-package tech.raxit.gatekeeper.management.repository;
-
-import org.springframework.data.jpa.repository.JpaRepository;
-import tech.raxit.gatekeeper.management.entity.ApiRoute;
-
-public interface ApiRouteRepository extends JpaRepository<ApiRoute, Long> {
-}

@@ -1,269 +1,238 @@
 package tech.raxit.gatekeeper.management.service;
 
 import lombok.RequiredArgsConstructor;
-import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
-import org.springframework.security.access.prepost.PreAuthorize;
-import org.springframework.security.core.Authentication;
-import org.springframework.security.core.context.SecurityContextHolder;
+import org.springframework.http.HttpStatus;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
-import tech.raxit.gatekeeper.management.dto.request.organization.InitialUserDetails;
-import tech.raxit.gatekeeper.management.dto.request.organization.OrganizationDetails;
-import tech.raxit.gatekeeper.management.dto.request.organization.OrganizationRegistrationRequest;
-import tech.raxit.gatekeeper.management.dto.response.organization.OrganizationRegistrationResponse;
-import tech.raxit.gatekeeper.management.dto.response.organization.OrganizationResponse;
-import tech.raxit.gatekeeper.management.dto.response.setup.IssuedSetupToken;
-import tech.raxit.gatekeeper.management.entity.*;
+import tech.raxit.gatekeeper.management.dto.request.OrganizationRequest;
+import tech.raxit.gatekeeper.management.dto.request.OrganizationStatusRequest;
+import tech.raxit.gatekeeper.management.dto.request.TenantAdminRequest;
+import tech.raxit.gatekeeper.management.dto.response.OrganizationResponse;
+import tech.raxit.gatekeeper.management.dto.response.TenantAdminResponse;
+import tech.raxit.gatekeeper.management.entity.ManagementUser;
+import tech.raxit.gatekeeper.management.entity.Organization;
+import tech.raxit.gatekeeper.management.entity.Role;
 import tech.raxit.gatekeeper.management.entity.enums.OrganizationStatus;
-import tech.raxit.gatekeeper.management.event.organization.OrganizationStatusChangedEvent;
-import tech.raxit.gatekeeper.management.event.setup.SetupInvitationRequested;
-import tech.raxit.gatekeeper.management.exception.DuplicateResourceException;
-import tech.raxit.gatekeeper.management.exception.OrganizationNotFoundException;
-import tech.raxit.gatekeeper.management.mapper.OrganizationMapper;
-import tech.raxit.gatekeeper.management.repository.*;
-import tools.jackson.core.JacksonException;
-import tools.jackson.databind.ObjectMapper;
+import tech.raxit.gatekeeper.management.exception.ApiException;
+import tech.raxit.gatekeeper.management.repository.ManagementUserRepository;
+import tech.raxit.gatekeeper.management.repository.OrganizationRepository;
+import tech.raxit.gatekeeper.management.repository.RoleRepository;
 
 import java.time.LocalDateTime;
-import java.util.UUID;
 
 @Service
 @RequiredArgsConstructor
-@PreAuthorize("hasRole('SUPER_ADMIN')")
 public class OrganizationService {
-
-    private static final String ORGANIZATION_ADMIN_ROLE =
-            "ORGANIZATION_ADMIN";
 
     private final OrganizationRepository organizationRepository;
     private final ManagementUserRepository managementUserRepository;
     private final RoleRepository roleRepository;
-    private final ControlPlaneAuditRecordRepository auditRecordRepository;
-    private final OutboxEventRepository outboxEventRepository;
-
-    private final ObjectMapper objectMapper;
-    private final SetupTokenService setupTokenService;
-    private final ApplicationEventPublisher applicationEventPublisher;
-    private final OrganizationMapper organizationMapper;
     private final PasswordEncoder passwordEncoder;
 
     @Transactional
-    public OrganizationRegistrationResponse registerOrganization(
-            OrganizationRegistrationRequest request
-    ) {
-        OrganizationDetails organizationDetails = request.organization();
-        InitialUserDetails initialUserDetails = request.initialUser();
+    public OrganizationResponse registerOrganization(OrganizationRequest request) {
+        checkUnique(request.name(), request.slug(), null);
 
-        validateRegistrationUniqueness(organizationDetails, initialUserDetails);
+        Organization organization = new Organization();
+        organization.setName(request.name());
+        organization.setSlug(request.slug());
 
-        Role adminRole = roleRepository
-                .findByName(ORGANIZATION_ADMIN_ROLE)
-                .orElseThrow(() -> new IllegalStateException(
-                        "Required ORGANIZATION_ADMIN role is missing"
+        organizationRepository.save(organization);
+
+        return OrganizationResponse.from(organization);
+    }
+
+    @Transactional(readOnly = true)
+    public Page<OrganizationResponse> getOrganizations(Pageable pageable) {
+        return organizationRepository
+                .findAllByStatusNot(OrganizationStatus.DELETED, pageable)
+                .map(OrganizationResponse::from);
+    }
+
+    @Transactional(readOnly = true)
+    public OrganizationResponse getOrganizationById(Long id) {
+        return OrganizationResponse.from(getOrganization(id));
+
+    }
+
+    private Organization getOrganization(Long id) {
+        return organizationRepository
+                .findByIdAndStatusNot(id, OrganizationStatus.DELETED)
+                .orElseThrow(() -> new ApiException(
+                        HttpStatus.NOT_FOUND,
+                        "Organization not found"
                 ));
-
-        LocalDateTime now = LocalDateTime.now();
-
-        Organization organization = organizationMapper.toOrganizationEntity(organizationDetails);
-
-        organization.setStatus(OrganizationStatus.INACTIVE);
-        organization.setCreatedAt(now);
-        organization.setUpdatedAt(now);
-
-        organization = organizationRepository.save(organization);
-
-        ManagementUser initialAdmin = organizationMapper.toManagementUserEntity(initialUserDetails);
-
-        initialAdmin.setOrganization(organization);
-        initialAdmin.setRole(adminRole);
-        initialAdmin.setEnabled(false);
-
-        String temporarySecret = UUID.randomUUID().toString();
-        initialAdmin.setPasswordHash(
-                passwordEncoder.encode(temporarySecret)
-        );
-
-        initialAdmin.setCreatedAt(now);
-        initialAdmin.setUpdatedAt(now);
-
-        initialAdmin = managementUserRepository.save(initialAdmin);
-
-        IssuedSetupToken issuedToken = setupTokenService.issueToken(initialAdmin);
-
-        publishEvent(organization, initialAdmin, issuedToken);
-
-        return organizationMapper.toRegistrationResponse(organization, initialAdmin);
     }
 
-    private void publishEvent(Organization organization, ManagementUser initialAdmin, IssuedSetupToken issuedToken) {
-        applicationEventPublisher.publishEvent(
-                new SetupInvitationRequested(
-                        organization.getId(),
-                        organization.getName(),
-                        initialAdmin.getId(),
-                        initialAdmin.getName(),
-                        initialAdmin.getEmail(),
-                        issuedToken.rawToken(),
-                        issuedToken.expiresAt()
-                )
-        );
-    }
+    private void checkUnique(String name, String slug, Long currentId) {
+        boolean nameExists = currentId == null
+                ? organizationRepository.existsByNameIgnoreCase(name)
+                : organizationRepository.existsByNameIgnoreCaseAndIdNot(name, currentId);
 
-    @Transactional(readOnly = true)
-    public Page<OrganizationResponse> getOrganizations(
-            Pageable pageable
-    ) {
-        return organizationRepository
-                .findAllByDeletedAtIsNull(pageable)
-                .map(organizationMapper::toResponseDto);
-    }
-
-    @Transactional(readOnly = true)
-    public OrganizationResponse getOrganizationById(
-            Long organizationId
-    ) {
-        return organizationMapper.toResponseDto(
-                getOrganization(organizationId)
-        );
-    }
-
-    @Transactional
-    public OrganizationResponse updateStatus(
-            Long organizationId,
-            OrganizationStatus targetStatus
-    ) {
-        Organization organization = getOrganization(organizationId);
-        OrganizationStatus currentStatus = organization.getStatus();
-
-        if (currentStatus == targetStatus) {
-            throw new DuplicateResourceException(
-                    "Organization already has status " + targetStatus
-            );
-        }
-
-        boolean validTransition = switch (currentStatus) {
-            case INACTIVE -> targetStatus == OrganizationStatus.ACTIVE;
-            case ACTIVE -> targetStatus == OrganizationStatus.INACTIVE
-                    || targetStatus == OrganizationStatus.SUSPENDED;
-            case SUSPENDED -> targetStatus == OrganizationStatus.ACTIVE
-                    || targetStatus == OrganizationStatus.INACTIVE;
-        };
-
-        if (!validTransition) {
-            throw new IllegalArgumentException(
-                    "Invalid organization status transition from "
-                            + currentStatus + " to " + targetStatus
-            );
-        }
-
-        organization.setStatus(targetStatus);
-        organization.setUpdatedAt(LocalDateTime.now());
-
-        recordStatusChange(organization, currentStatus, targetStatus);
-        enqueueStatusChangedEvent(organization, currentStatus, targetStatus);
-
-        return organizationMapper.toResponseDto(organization);
-    }
-
-    private Organization getOrganization(Long organizationId) {
-        return organizationRepository
-                .findByIdAndDeletedAtIsNull(organizationId)
-                .orElseThrow(() ->
-                        new OrganizationNotFoundException(organizationId)
-                );
-    }
-
-    private void validateRegistrationUniqueness(
-            OrganizationDetails organization,
-            InitialUserDetails user
-    ) {
-        if (organizationRepository.existsBySlug(organization.slug())) {
-            throw new DuplicateResourceException(
-                    "Organization slug already exists"
-            );
-        }
-
-        if (organizationRepository.existsByName(organization.name())) {
-            throw new DuplicateResourceException(
+        if (nameExists) {
+            throw new ApiException(
+                    HttpStatus.CONFLICT,
                     "Organization name already exists"
             );
         }
 
-        if (managementUserRepository.existsByUsername(user.username())) {
-            throw new DuplicateResourceException(
+        boolean slugExists = currentId == null
+                ? organizationRepository.existsBySlugIgnoreCase(slug)
+                : organizationRepository.existsBySlugIgnoreCaseAndIdNot(slug, currentId);
+
+        if (slugExists) {
+            throw new ApiException(
+                    HttpStatus.CONFLICT,
+                    "Organization slug already exists"
+            );
+        }
+    }
+
+    @Transactional
+    public OrganizationResponse updateOrganization(Long id, OrganizationRequest request) {
+        checkUnique(request.name(), request.slug(), id);
+
+        Organization organizationToUpdate = getOrganization(id);
+
+        organizationToUpdate.setName(request.name());
+        organizationToUpdate.setSlug(request.slug());
+
+        organizationRepository.flush();
+
+        return OrganizationResponse.from(organizationToUpdate);
+    }
+
+    @Transactional
+    public OrganizationResponse changeStatus(Long id, OrganizationStatusRequest request) {
+
+        Organization organization = getOrganization(id);
+
+        if (request.status() == OrganizationStatus.DELETED) {
+            throw new ApiException(
+                    HttpStatus.BAD_REQUEST,
+                    "Use DELETE to soft-delete an organization"
+            );
+        }
+
+        boolean allowed = switch (organization.getStatus()) {
+            case ACTIVE -> request.status() == OrganizationStatus.INACTIVE
+                    || request.status() == OrganizationStatus.SUSPENDED;
+
+            case INACTIVE -> request.status() == OrganizationStatus.ACTIVE
+                    || request.status() == OrganizationStatus.SUSPENDED;
+
+            case PENDING, SUSPENDED -> request.status() == OrganizationStatus.ACTIVE
+                    || request.status() == OrganizationStatus.INACTIVE;
+
+            case DELETED -> false;
+        };
+
+        if (!allowed) {
+            throw new ApiException(
+                    HttpStatus.BAD_REQUEST,
+                    "Invalid organization status change request"
+            );
+        }
+
+        organization.setStatus(request.status());
+
+        return OrganizationResponse.from(organization);
+    }
+
+    @Transactional
+    public void delete(Long id) {
+        Organization organization = getOrganization(id);
+
+        organization.setStatus(OrganizationStatus.DELETED);
+        organization.setDeletedAt(LocalDateTime.now());
+    }
+
+    @Transactional
+    public TenantAdminResponse createTenantAdmin(Long organizationId, TenantAdminRequest request) {
+        Organization organization = getOrganization(organizationId);
+
+        checkTenantAdminExists(organizationId, request);
+
+        Role role = getTenantAdminRole();
+
+        ManagementUser user = new ManagementUser();
+
+        user.setOrganization(organization);
+        user.setRole(role);
+        user.setUsername(request.username());
+        user.setPasswordHash(passwordEncoder.encode(request.password()));
+
+        managementUserRepository.save(user);
+
+        return TenantAdminResponse.from(user);
+    }
+
+    private void checkTenantAdminExists(Long organizationId, TenantAdminRequest request) {
+        if (managementUserRepository.existsByOrganizationId(organizationId)) {
+            throw new ApiException(
+                    HttpStatus.CONFLICT,
+                    "This organization already has an administrator"
+            );
+        }
+
+        if (managementUserRepository.existsByUsername(request.username())) {
+            throw new ApiException(
+                    HttpStatus.CONFLICT,
                     "Username already exists"
             );
         }
-
-        if (managementUserRepository.existsByEmail(user.email())) {
-            throw new DuplicateResourceException(
-                    "Email already exists"
-            );
-        }
     }
 
-    private void recordStatusChange(
-            Organization organization,
-            OrganizationStatus previousStatus,
-            OrganizationStatus newStatus
-    ) {
-        Authentication authentication =
-                SecurityContextHolder
-                        .getContext()
-                        .getAuthentication();
-
-        String actor = authentication != null
-                ? authentication.getName()
-                : "system";
-
-        ControlPlaneAuditRecord record = new ControlPlaneAuditRecord();
-        record.setOrganization(organization);
-        record.setActor(actor);
-        record.setAction("ORGANIZATION_STATUS_CHANGED");
-        record.setResourceType("ORGANIZATION");
-        record.setResourceId(organization.getId().toString());
-        record.setDurationMs(0L);
-        record.setResult("SUCCESS");
-        record.setDetails(
-                "Status changed from " + previousStatus + " to " + newStatus
-        );
-        record.setCreatedAt(LocalDateTime.now());
-
-        auditRecordRepository.save(record);
+    private Role getTenantAdminRole() {
+        return roleRepository
+                .findByName("ORGANIZATION_ADMIN")
+                .orElseThrow(() -> new ApiException(
+                        HttpStatus.INTERNAL_SERVER_ERROR,
+                        "ORGANIZATION_ADMIN role is missing"
+                ));
     }
 
-    private void enqueueStatusChangedEvent(
-            Organization organization,
-            OrganizationStatus previousStatus,
-            OrganizationStatus newStatus
-    ) {
-        try {
-            String payload = objectMapper.writeValueAsString(
-                    new OrganizationStatusChangedEvent(
-                            organization.getId(),
-                            previousStatus,
-                            newStatus,
-                            organization.getUpdatedAt()
-                    )
-            );
+    @Transactional(readOnly = true)
+    public TenantAdminResponse getTenantAdminByOrganizationId(Long organizationId) {
+        return TenantAdminResponse.from(getTenantAdmin(organizationId));
+    }
 
-            OutboxEvent event = new OutboxEvent();
-            event.setAggregateType("ORGANIZATION");
-            event.setAggregateId(organization.getId().toString());
-            event.setEventType("ORGANIZATION_STATUS_CHANGED");
-            event.setPayload(payload);
-            event.setCreatedAt(LocalDateTime.now());
-            event.setAttempts(0);
+    @Transactional
+    public TenantAdminResponse updateTenantAdmin(Long organizationId, TenantAdminRequest request) {
+        ManagementUser user = getTenantAdmin(organizationId);
 
-            outboxEventRepository.save(event);
-        } catch (JacksonException exception) {
-            throw new IllegalStateException(
-                    "Could not serialize organization status event",
-                    exception
-            );
+        if(!user.getUsername().equals(request.username())
+                && managementUserRepository.existsByUsername(request.username())) {
+            throw new ApiException(HttpStatus.CONFLICT, "Username already exists");
         }
+
+        user.setUsername(request.username());
+        user.setPasswordHash(passwordEncoder.encode(request.password()));
+
+        managementUserRepository.flush();
+
+        return TenantAdminResponse.from(user);
+    }
+
+    @Transactional
+    public void deleteTenantAdmin(Long organizationId) {
+
+        ManagementUser user = getTenantAdmin(organizationId);
+
+        managementUserRepository.delete(user);
+    }
+
+    private ManagementUser getTenantAdmin(Long organizationId) {
+        getOrganization(organizationId);
+
+        return managementUserRepository
+                .findByOrganizationId(organizationId)
+                .orElseThrow(() -> new ApiException(
+                        HttpStatus.NOT_FOUND,
+                        "Organization administrator not found"
+                ));
     }
 }

@@ -1,71 +1,87 @@
 package tech.raxit.gatekeeper.management.config;
 
+import com.nimbusds.jose.crypto.impl.HMAC;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
-import org.springframework.core.annotation.Order;
+import org.springframework.core.convert.converter.Converter;
 import org.springframework.http.HttpMethod;
-import org.springframework.security.config.Customizer;
-import org.springframework.security.config.annotation.method.configuration.EnableMethodSecurity;
+import org.springframework.security.authentication.AbstractAuthenticationToken;
 import org.springframework.security.config.annotation.web.builders.HttpSecurity;
+import org.springframework.security.config.annotation.web.configurers.AbstractHttpConfigurer;
+import org.springframework.security.config.http.SessionCreationPolicy;
+import org.springframework.security.core.authority.SimpleGrantedAuthority;
 import org.springframework.security.crypto.bcrypt.BCryptPasswordEncoder;
 import org.springframework.security.crypto.password.PasswordEncoder;
+import org.springframework.security.oauth2.jose.jws.MacAlgorithm;
+import org.springframework.security.oauth2.jwt.*;
+import org.springframework.security.oauth2.server.resource.authentication.JwtAuthenticationToken;
 import org.springframework.security.web.SecurityFilterChain;
 
+import javax.crypto.SecretKey;
+import javax.crypto.spec.SecretKeySpec;
+import java.nio.charset.StandardCharsets;
+import java.util.Collections;
+
 @Configuration
-@EnableMethodSecurity
 public class SecurityConfig {
 
     @Bean
-    @Order(1)
     public SecurityFilterChain monitoringSecurityFilterChain(
-            HttpSecurity httpSecurity) {
-
-        httpSecurity
-                .securityMatcher("/health")
-                .authorizeHttpRequests(authorize ->
-                        authorize.anyRequest().authenticated()
+            HttpSecurity http
+    ) {
+        http
+                .csrf(AbstractHttpConfigurer::disable)
+                .sessionManagement(session ->
+                        session.sessionCreationPolicy(SessionCreationPolicy.STATELESS)
+                )
+                .authorizeHttpRequests(authorize -> authorize
+                        .requestMatchers("/health", "/api/auth/login").permitAll()
+                        .requestMatchers("/api/platform/**").hasRole("SUPER_ADMIN")
+                        .requestMatchers("/api/tenant/**").hasRole("ORGANIZATION_ADMIN")
+                        .requestMatchers("/api/gateway/**").hasRole("GATEWAY_SERVICE")
+                        .anyRequest().authenticated()
+                )
+                .oauth2ResourceServer(resourceServer -> resourceServer
+                        .jwt(jwt -> jwt
+                                .jwtAuthenticationConverter(jwtAuthenticationConverter())
+                        )
                 );
 
-        return httpSecurity.build();
+        return http.build();
     }
 
-    @Bean
-    @Order(2)
-    public SecurityFilterChain accountSetupSecurityFilterChain(
-            HttpSecurity httpSecurity) {
-
-        httpSecurity
-                .securityMatcher("/api/v1/management-users/complete-setup")
-                .csrf(csrf -> csrf.disable())
-                .authorizeHttpRequests(authorize ->
-                        authorize
-                                .requestMatchers(
-                                        HttpMethod.POST
-                                ).permitAll()
-                                .anyRequest().denyAll()
-                );
-
-        return httpSecurity.build();
-
-    }
-
-    @Bean
-    @Order(3)
-    public SecurityFilterChain managementApiSecurityFilterChain(
-            HttpSecurity httpSecurity) {
-
-        httpSecurity
-                .csrf(csrf -> csrf.disable())
-                .httpBasic(Customizer.withDefaults())
-                .authorizeHttpRequests(authorize ->
-                        authorize.anyRequest().authenticated()
-                );
-
-        return httpSecurity.build();
+    private Converter<Jwt, AbstractAuthenticationToken> jwtAuthenticationConverter() {
+        return jwt -> {
+            String role = jwt.getClaimAsString("role");
+            return new JwtAuthenticationToken(
+                    jwt,
+                    Collections.singletonList(new SimpleGrantedAuthority("ROLE_" + role)), jwt.getSubject());
+        };
     }
 
     @Bean
     public PasswordEncoder passwordEncoder() {
         return new BCryptPasswordEncoder();
+    }
+
+    @Bean
+    public JwtEncoder jwtEncoder(@Value("${security.jwt.secret}") String secret) {
+        SecretKey secretKey = new SecretKeySpec(
+                secret.getBytes(StandardCharsets.UTF_8),
+                "HmacSHA256"
+        );
+
+        return NimbusJwtEncoder.withSecretKey(secretKey).algorithm(MacAlgorithm.HS256).build();
+    }
+
+    @Bean
+    public JwtDecoder jwtDecoder(@Value("${security.jwt.secret}") String secret) {
+        SecretKey secretKey = new SecretKeySpec(
+                secret.getBytes(StandardCharsets.UTF_8),
+                "HmacSHA256"
+        );
+
+        return NimbusJwtDecoder.withSecretKey(secretKey).macAlgorithm(MacAlgorithm.HS256).build();
     }
 }
