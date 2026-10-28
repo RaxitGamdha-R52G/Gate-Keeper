@@ -55,7 +55,15 @@ public class RouteService {
 
         ApiRoute route = new ApiRoute();
         route.setOrganization(organization);
-        route.setConfigurationVersion(1L);
+
+        long latestVersion = versionRepository
+                .findMaxVersionNumber(
+                        organization.getId(),
+                        request.routeId()
+                );
+
+
+        route.setConfigurationVersion(latestVersion + 1);
 
         toEntity(route, request);
 
@@ -65,7 +73,7 @@ public class RouteService {
 
         auditService.record(organization, "CREATE_ROUTE",
                 "API_ROUTE", route.getRouteId(), startedAt,
-                "Route configuration version 1 created");
+                "Route configuration version %d created".formatted(latestVersion + 1));
 
         return RouteResponse.from(route);
     }
