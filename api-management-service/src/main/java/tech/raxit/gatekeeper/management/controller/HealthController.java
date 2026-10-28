@@ -1,6 +1,5 @@
 package tech.raxit.gatekeeper.management.controller;
 
-import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
@@ -20,9 +19,8 @@ public class HealthController {
     }
 
     @GetMapping
-    public ResponseEntity<HealthResponse> health() {
+    public HealthResponse health() {
         String dbStatus = healthService.getHealth();
-        return ResponseEntity.ok(
-                new HealthResponse("UP", dbStatus, LocalDateTime.now()));
+        return new HealthResponse("UP", dbStatus, LocalDateTime.now());
     }
 }

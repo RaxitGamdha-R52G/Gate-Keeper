@@ -4,7 +4,7 @@ import jakarta.validation.constraints.NotNull;
 import tech.raxit.gatekeeper.management.entity.enums.OrganizationStatus;
 
 public record OrganizationStatusRequest(
-        @NotNull
+        @NotNull(message = "Organization status is required")
         OrganizationStatus status
 ) {
 }

@@ -33,9 +33,12 @@ public class OrganizationService {
     private final RoleRepository roleRepository;
     private final PasswordEncoder passwordEncoder;
     private final TenantContext tenantContext;
+    private final AuditService auditService;
 
     @Transactional
     public OrganizationResponse registerOrganization(OrganizationRequest request) {
+        long startedAt = System.nanoTime();
+
         checkUnique(request.name(), request.slug(), null);
 
         Organization organization = new Organization();
@@ -43,6 +46,10 @@ public class OrganizationService {
         organization.setSlug(request.slug());
 
         organizationRepository.save(organization);
+
+        auditService.record(organization, "CREATE_ORGANIZATION", "ORGANIZATION",
+                organization.getId().toString(), startedAt,
+                "Organization created in PENDING status");
 
         return OrganizationResponse.from(organization);
     }
@@ -95,6 +102,8 @@ public class OrganizationService {
 
     @Transactional
     public OrganizationResponse updateOrganization(Long id, OrganizationRequest request) {
+        long startedAt = System.nanoTime();
+
         checkUnique(request.name(), request.slug(), id);
 
         Organization organizationToUpdate = getOrganization(id);
@@ -104,11 +113,16 @@ public class OrganizationService {
 
         organizationRepository.flush();
 
+        auditService.record(organizationToUpdate, "UPDATE_ORGANIZATION",
+                "ORGANIZATION", id.toString(), startedAt,
+                "Organization name and slug updated");
+
         return OrganizationResponse.from(organizationToUpdate);
     }
 
     @Transactional
     public OrganizationResponse changeStatus(Long id, OrganizationStatusRequest request) {
+        long startedAt = System.nanoTime();
 
         Organization organization = getOrganization(id);
 
@@ -141,19 +155,33 @@ public class OrganizationService {
 
         organization.setStatus(request.status());
 
+        organizationRepository.flush();
+
+        auditService.record(organization, "CHANGE_ORGANIZATION_STATUS",
+                "ORGANIZATION", id.toString(),
+                startedAt, "Status changed to " + request.status());
+
         return OrganizationResponse.from(organization);
     }
 
     @Transactional
     public void delete(Long id) {
+        long startedAt = System.nanoTime();
+
         Organization organization = getOrganization(id);
 
         organization.setStatus(OrganizationStatus.DELETED);
         organization.setDeletedAt(LocalDateTime.now());
+
+        auditService.record(organization, "DELETE_ORGANIZATION",
+                "ORGANIZATION", id.toString(), startedAt,
+                "Organization soft-deleted");
     }
 
     @Transactional
     public TenantAdminResponse createTenantAdmin(Long organizationId, TenantAdminRequest request) {
+        long startedAt = System.nanoTime();
+
         Organization organization = getOrganization(organizationId);
 
         checkTenantAdminExists(organizationId, request);
@@ -168,6 +196,10 @@ public class OrganizationService {
         user.setPasswordHash(passwordEncoder.encode(request.password()));
 
         managementUserRepository.save(user);
+
+        auditService.record(organization, "CREATE_TENANT_ADMIN",
+                "MANAGEMENT_USER", user.getId().toString(),
+                startedAt, "Tenant administrator created");
 
         return TenantAdminResponse.from(user);
     }
@@ -204,6 +236,8 @@ public class OrganizationService {
 
     @Transactional
     public TenantAdminResponse updateTenantAdmin(Long organizationId, TenantAdminRequest request) {
+        long startedAt = System.nanoTime();
+
         ManagementUser user = getTenantAdmin(organizationId);
 
         if (!user.getUsername().equals(request.username())
@@ -216,15 +250,24 @@ public class OrganizationService {
 
         managementUserRepository.flush();
 
+        auditService.record(user.getOrganization(), "UPDATE_TENANT_ADMIN",
+                "MANAGEMENT_USER", user.getId().toString(), startedAt,
+                "Tenant administrator updated");
+
         return TenantAdminResponse.from(user);
     }
 
     @Transactional
     public void deleteTenantAdmin(Long organizationId) {
+        long startedAt = System.nanoTime();
 
         ManagementUser user = getTenantAdmin(organizationId);
 
         managementUserRepository.delete(user);
+
+        auditService.record(user.getOrganization(), "DELETE_TENANT_ADMIN",
+                "MANAGEMENT_USER", user.getId().toString(), startedAt,
+                "Tenant administrator deleted");
     }
 
     private ManagementUser getTenantAdmin(Long organizationId) {
@@ -245,6 +288,8 @@ public class OrganizationService {
 
     @Transactional
     public OrganizationResponse updateOwnOrganization(TenantOrganizationRequest request) {
+        long startedAt = System.nanoTime();
+
         Organization organization = tenantContext.getOrganization();
 
         if (!organization.getName().equalsIgnoreCase(request.name())
@@ -258,6 +303,10 @@ public class OrganizationService {
         organization.setName(request.name());
 
         organizationRepository.flush();
+
+        auditService.record(organization, "UPDATE_OWN_ORGANIZATION",
+                "ORGANIZATION", organization.getId().toString(), startedAt,
+                "Tenant updated its organization name");
 
         return OrganizationResponse.from(organization);
     }
