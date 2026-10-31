@@ -69,6 +69,18 @@ public class GlobalExceptionHandler {
         );
     }
 
+    @ExceptionHandler(Exception.class)
+    public ResponseEntity<ExceptionResponseDto> handleUnexpectedExceptions(
+            Exception exception,
+            HttpServletRequest request
+    ) {
+        return generateExceptionResponse(
+                HttpStatus.INTERNAL_SERVER_ERROR,
+                "Unexpected server error",
+                request.getRequestURI()
+        );
+    }
+
     private ResponseEntity<ExceptionResponseDto> generateExceptionResponse(
             HttpStatus status,
             String message,
