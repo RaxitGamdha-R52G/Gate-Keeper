@@ -1,13 +1,17 @@
 package tech.raxit.gatekeeper.management.dto.response;
 
+import lombok.AllArgsConstructor;
+import lombok.Getter;
+
 import java.time.Instant;
 
-public record ExceptionResponseDto(
-        Instant timeStamp,
-        int status,
-        String error,
-        String message,
-        String path
-) {
+@Getter
+@AllArgsConstructor
+public class ExceptionResponseDto {
+    protected final Instant timestamp;
+    protected final int status;
+    protected final String error;
+    protected final String message;
+    protected final String path;
 }
 
