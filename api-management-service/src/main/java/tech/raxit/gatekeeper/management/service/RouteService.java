@@ -16,6 +16,7 @@ import tech.raxit.gatekeeper.management.entity.Organization;
 import tech.raxit.gatekeeper.management.entity.RouteConfigurationVersion;
 import tech.raxit.gatekeeper.management.entity.RouteHeaderRule;
 import tech.raxit.gatekeeper.management.entity.enums.OrganizationStatus;
+import tech.raxit.gatekeeper.management.event.GatewayConfigurationEventService;
 import tech.raxit.gatekeeper.management.exception.ApiException;
 import tech.raxit.gatekeeper.management.repository.ApiRouteRepository;
 import tech.raxit.gatekeeper.management.repository.ControlPlaneAuditRecordRepository;
@@ -38,6 +39,7 @@ public class RouteService {
     private final TenantContext tenantContext;
     private final AuditService auditService;
     private final ObjectMapper objectMapper;
+    private final GatewayConfigurationEventService gatewayConfigurationEventService;
 
     @Transactional
     public RouteResponse create(RouteRequest request) {
@@ -74,6 +76,13 @@ public class RouteService {
         auditService.record(organization, "CREATE_ROUTE",
                 "API_ROUTE", route.getRouteId(), startedAt,
                 "Route configuration version %d created".formatted(latestVersion + 1));
+
+        gatewayConfigurationEventService.publish(
+                "CREATED",
+                organization.getId(),
+                route.getRouteId(),
+                route.getConfigurationVersion()
+        );
 
         return RouteResponse.from(route);
     }
@@ -121,6 +130,13 @@ public class RouteService {
         auditService.record(organization, "UPDATE_ROUTE", "API_ROUTE",
                 route.getRouteId(), startedAt, "Route configuration version %d created".formatted(route.getConfigurationVersion()));
 
+        gatewayConfigurationEventService.publish(
+                "UPDATED",
+                organization.getId(),
+                route.getRouteId(),
+                route.getConfigurationVersion()
+        );
+
         return RouteResponse.from(route);
     }
 
@@ -144,6 +160,13 @@ public class RouteService {
         auditService.record(organization, action, "API_ROUTE", route.getRouteId(), startedAt,
                 "Route configuration version %d created".formatted(route.getConfigurationVersion()));
 
+        gatewayConfigurationEventService.publish(
+                changeType,
+                organization.getId(),
+                route.getRouteId(),
+                route.getConfigurationVersion()
+        );
+
         return RouteResponse.from(route);
     }
 
@@ -159,6 +182,13 @@ public class RouteService {
 
         auditService.record(organization, "DELETE_ROUTE", "API_ROUTE", route.getRouteId(), startedAt,
                 "Final configuration saved as version %d".formatted(route.getConfigurationVersion()));
+
+        gatewayConfigurationEventService.publish(
+                "DELETED",
+                organization.getId(),
+                route.getRouteId(),
+                route.getConfigurationVersion()
+        );
 
         apiRouteRepository.delete(route);
     }

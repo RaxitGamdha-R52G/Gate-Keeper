@@ -17,6 +17,7 @@ import tech.raxit.gatekeeper.management.entity.ManagementUser;
 import tech.raxit.gatekeeper.management.entity.Organization;
 import tech.raxit.gatekeeper.management.entity.Role;
 import tech.raxit.gatekeeper.management.entity.enums.OrganizationStatus;
+import tech.raxit.gatekeeper.management.event.GatewayConfigurationEventService;
 import tech.raxit.gatekeeper.management.exception.ApiException;
 import tech.raxit.gatekeeper.management.repository.ManagementUserRepository;
 import tech.raxit.gatekeeper.management.repository.OrganizationRepository;
@@ -34,6 +35,7 @@ public class OrganizationService {
     private final PasswordEncoder passwordEncoder;
     private final TenantContext tenantContext;
     private final AuditService auditService;
+    private final GatewayConfigurationEventService gatewayConfigurationEventService;
 
     @Transactional
     public OrganizationResponse registerOrganization(OrganizationRequest request) {
@@ -117,6 +119,13 @@ public class OrganizationService {
                 "ORGANIZATION", id.toString(), startedAt,
                 "Organization name and slug updated");
 
+        gatewayConfigurationEventService.publish(
+                "ORGANIZATION_UPDATED",
+                organizationToUpdate.getId(),
+                null,
+                null
+        );
+
         return OrganizationResponse.from(organizationToUpdate);
     }
 
@@ -161,6 +170,13 @@ public class OrganizationService {
                 "ORGANIZATION", id.toString(),
                 startedAt, "Status changed to " + request.status());
 
+        gatewayConfigurationEventService.publish(
+                "ORGANIZATION_" + request.status(),
+                organization.getId(),
+                null,
+                null
+        );
+
         return OrganizationResponse.from(organization);
     }
 
@@ -173,9 +189,18 @@ public class OrganizationService {
         organization.setStatus(OrganizationStatus.DELETED);
         organization.setDeletedAt(LocalDateTime.now());
 
+        organizationRepository.flush();
+
         auditService.record(organization, "DELETE_ORGANIZATION",
                 "ORGANIZATION", id.toString(), startedAt,
                 "Organization soft-deleted");
+
+        gatewayConfigurationEventService.publish(
+                "ORGANIZATION_DELETED",
+                organization.getId(),
+                null,
+                null
+        );
     }
 
     @Transactional
